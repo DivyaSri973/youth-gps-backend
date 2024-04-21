@@ -1,0 +1,106 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Youth GPS Backend Service 
+  AWS Serverless Application Model template for defining the application's resources.
+
+Globals:
+  Function:
+    Timeout: 300
+
+Parameters:
+  TierName:
+    Type: String
+    Default: dev
+
+Resources:
+  # Fargate
+  CognitoFargateCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub "${TierName}-youth-gps"
+  YouthGPSUsersContainterRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub "${TierName}-youth-gps-users"
+  YouthGPSUsersLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/ecs/${TierName}-youth-gps-users"
+  # Data Load Lambdas
+  YouthGPSGetUserData:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${TierName}-cognito-youth-gps-get-userdata"
+      CodeUri: lambda/youth-gps_get_userdata
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Role: arn:aws:iam::arnNumber:role/lambda_elevated_access_role
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-057b0e36209f0850c
+        SubnetIds:
+          - subnet-0aa58282130b2f3a2
+          - subnet-074227c5fd22c4ad7
+      Events:
+        ApiGatewayEvent:
+          Type: Api
+          Properties:
+            Path: /myendpoint
+            Method: get
+      Environment:
+        Variables:
+          DB_HOSTNAME: '{{resolve:secretsmanager:banner-db-test:SecretString:host}}'
+          DB_PORT_NUMBER: '{{resolve:secretsmanager:banner-db-test:SecretString:port}}'
+          DB_SERVICE_NAME: '{{resolve:secretsmanager:banner-db-test:SecretString:dbname}}'
+          DB_USER: '{{resolve:secretsmanager:banner-db-test:SecretString:username}}'
+          DB_PASSWORD: '{{resolve:secretsmanager:banner-db-test:SecretString:password}}'
+          # USER_DATA_SQS: !Ref YouthGPSUserDataTransformQueue
+          NEU_IDP_PREFIX: neuidmssotest
+  YouthGPSGetMetricsData:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub "${TierName}-youth-gps-get-metrics-data"
+      CodeUri: lambda/youthgps_get_metrics_data
+      Handler: app.lambda_handler
+      Runtime: python3.7
+      Role: arn:aws:iam::arnNumber:role/lambda_elevated_access_role
+      VpcConfig:
+        SecurityGroupIds:
+          - sg-057b0e36209f0850c
+        SubnetIds:
+          - subnet-0aa58282130b2f3a2
+          - subnet-074227c5fd22c4ad7
+      Events:
+        # UserSqsEvent:
+        #   Type: SQS
+        #   Properties:
+        #     Queue: !GetAtt MetricsDataQueryQueue.Arn
+        #     BatchSize: 10
+      Environment:
+        Variables:
+          DB_HOSTNAME: '{{resolve:secretsmanager:banner-db-test:SecretString:host}}'
+          DB_PORT_NUMBER: '{{resolve:secretsmanager:banner-db-test:SecretString:port}}'
+          DB_SERVICE_NAME: '{{resolve:secretsmanager:banner-db-test:SecretString:dbname}}'
+          DB_USER: '{{resolve:secretsmanager:banner-db-test:SecretString:username}}'
+          DB_PASSWORD: '{{resolve:secretsmanager:banner-db-test:SecretString:password}}'
+          # COURSE_DATA_TRANSFORM_SQS: !Ref MetricsDataTransformQueue
+          NEU_IDP_PREFIX: neuidmssotest
+
+  # # SQS Queues
+  # UserDataQueryQueue:
+  #   Type: AWS::SQS::Queue
+  #   Properties:
+  #     QueueName: !Sub "${TierName}-sail-cognito-UserDataQuery"
+  #     VisibilityTimeout: 600
+  #     RedrivePolicy:
+  #       deadLetterTargetArn: !Sub ${DeadLetterSqsQueue.Arn}
+  #       maxReceiveCount: 10
+  # UserDataTransformQueue:
+  #   Type: AWS::SQS::Queue
+  #   Properties:
+  #     QueueName: !Sub "${TierName}-sail-cognito-UserDataTransform"
+  #     VisibilityTimeout: 600
+  #     RedrivePolicy:
+  #       deadLetterTargetArn: !Sub ${DeadLetterSqsQueue.Arn}
+  #       maxReceiveCount: 10
